@@ -3,12 +3,14 @@ import { messageForStatus } from './http';
 
 // Create (or, with `id`, update) a product with a progress callback. fetch() cannot report upload progress, XHR can.
 // `signal` (AbortSignal) cancels the request; the promise then rejects with name === 'AbortError'.
-export function uploadProduct({ token, id, fields, image, removeImage, onProgress, signal }) {
+// `images` are the NEW photo files in order. For an update, `imageOrder` lists the final photos: existing
+// photo URLs and "new:0", "new:1" (the files above, in order). Anything not listed is removed.
+export function uploadProduct({ token, id, fields, images = [], imageOrder, onProgress, signal }) {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
-    if (image) fd.append('image', image, image.name);
-    if (id && removeImage && !image) fd.append('remove_image', '1');
+    images.forEach((file) => fd.append('images', file, file.name));
+    if (id && imageOrder !== undefined) fd.append('image_order', JSON.stringify(imageOrder));
 
     const xhr = new XMLHttpRequest();
     xhr.open(id ? 'PUT' : 'POST', id ? `${API_BASE}/products/${id}` : `${API_BASE}/products`);

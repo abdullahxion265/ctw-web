@@ -523,3 +523,57 @@ h1, h2, h3 {
   .inv-meta { flex: 1 1 100%; justify-content: space-between; margin-left: 0; padding-top: 0.65rem; border-top: 1px solid rgba(142, 142, 147, 0.12); }
   .inv-meta .inv-price { text-align: left !important; }
 }
+
+/* ── Photo carousel (product cards and the product popup) ── */
+.carousel { position: absolute; inset: 0; outline: none; }
+.carousel:focus-visible { box-shadow: inset 0 0 0 2px var(--color-accent-gold); }
+.carousel-track {
+  display: flex; width: 100%; height: 100%; overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
+}
+.carousel-track::-webkit-scrollbar { display: none; }
+.carousel-slide { flex: 0 0 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; position: relative; }
+.carousel-slide img { width: 100%; height: 100%; object-fit: cover; display: block; transform: none !important; transition: none !important; user-select: none; }
+.carousel-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  width: 32px; height: 32px; border-radius: 999px; border: 1px solid rgba(212, 175, 55, 0.35);
+  background: rgba(13, 13, 13, 0.78); color: var(--color-neutral-light); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: opacity 0.2s ease;
+}
+.carousel-prev { left: 8px; } .carousel-next { right: 8px; }
+@media (hover: hover) {
+  .carousel-arrows-hover .carousel-arrow { opacity: 0; }
+  .carousel-arrows-hover:hover .carousel-arrow, .carousel-arrows-hover .carousel-arrow:focus-visible { opacity: 1; }
+}
+@media (hover: none) { .carousel-arrows-hover .carousel-arrow { display: none; } }
+.carousel-dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 5px; z-index: 2; pointer-events: none; }
+.carousel-dots span { width: 6px; height: 6px; border-radius: 999px; background: rgba(245, 245, 247, 0.5); box-shadow: 0 0 0 1px rgba(13, 13, 13, 0.35); transition: all 0.2s ease; }
+.carousel-dots span.active { width: 16px; background: var(--color-accent-gold); }
+.carousel-thumbs { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; gap: 6px; justify-content: center; padding: 1.5rem 0.75rem 0.7rem; background: linear-gradient(to top, rgba(13, 13, 13, 0.85), rgba(13, 13, 13, 0)); }
+.carousel-thumbs button { width: 46px; height: 46px; padding: 0; border-radius: 6px; overflow: hidden; cursor: pointer; border: 2px solid transparent; opacity: 0.7; background: #111; transition: all 0.2s ease; }
+.carousel-thumbs button.active { border-color: var(--color-accent-gold); opacity: 1; }
+.carousel-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── Follow us, service strip, footer ─────────────────────── */
+.follow-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; max-width: 760px; margin: 0 auto; }
+@media (min-width: 640px) { .follow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.follow-card {
+  display: flex; align-items: center; gap: 0.9rem; padding: 1.1rem 1.2rem; text-decoration: none;
+  background: var(--color-secondary-dark); border: 1px solid rgba(142, 142, 147, 0.18); border-radius: 12px;
+  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+}
+.follow-card:hover, .follow-card:focus-visible { border-color: var(--color-accent-gold); background: rgba(212, 175, 55, 0.05); transform: translateY(-2px); outline: none; }
+.follow-icon {
+  width: 44px; height: 44px; border-radius: 999px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--color-accent-gold); background: rgba(212, 175, 55, 0.08); border: 1px solid rgba(212, 175, 55, 0.3);
+}
+.service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.75rem; max-width: 860px; }
+.footer-link { color: var(--color-muted-gray); font-size: 0.8rem; text-decoration: none; letter-spacing: 0.08em; text-transform: uppercase; }
+.footer-link:hover { color: var(--color-accent-gold); }
+.footer-social {
+  width: 40px; height: 40px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--color-neutral-light); border: 1px solid rgba(142, 142, 147, 0.3); transition: all 0.2s ease;
+}
+.footer-social:hover, .footer-social:focus-visible { color: var(--color-accent-gold); border-color: var(--color-accent-gold); background: rgba(212, 175, 55, 0.08); outline: none; }
+
+@media (hover: none) { .quick-view-overlay { display: none !important; } }

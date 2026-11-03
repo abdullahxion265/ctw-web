@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Camera, ImagePlus, Trash2, RefreshCw, CheckCircle2, AlertCircle, Loader2, X, Shirt, PlusCircle, Package,
+  Camera, ImagePlus, CheckCircle2, AlertCircle, Loader2, X, Shirt, PlusCircle, Package,
+  ChevronLeft, ChevronRight, Plus,
 } from 'lucide-react';
 import { CATEGORIES, DEFAULT_BRAND } from '../config';
 import { formatMoney } from '../utils/currency';
 import { prepareImage, formatBytes } from '../utils/image';
 import { uploadProduct } from '../utils/upload';
+import { photosOf, MAX_PHOTOS } from '../utils/photos';
 
 const CATEGORY_OPTIONS = CATEGORIES.filter((c) => c.id !== 'all');
 const EMPTY = { name: '', brand: '', category: 'men', price_zar: '', price_mwk: '', description: '' };
@@ -24,6 +26,10 @@ const stepNum = {
   justifyContent: 'center', fontFamily: 'var(--font-mono)',
 };
 const bigBtn = { flex: '1 1 150px', justifyContent: 'center', padding: '0.85rem 1rem', fontSize: '0.82rem' };
+const tileBtn = {
+  width: '22px', height: '22px', borderRadius: '999px', border: '1px solid rgba(245,245,247,0.25)', cursor: 'pointer',
+  background: 'rgba(13,13,13,0.82)', color: 'var(--color-neutral-light)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+};
 
 const toInput = (v) => (v === null || v === undefined || v === '' ? '' : String(Number(v)));
 function fieldsFromProduct(p) {
@@ -32,41 +38,38 @@ function fieldsFromProduct(p) {
     price_zar: toInput(p.price_zar), price_mwk: toInput(p.price_mwk ?? p.price), description: p.description || '',
   };
 }
+const existingPhotos = (p) => photosOf(p).map((path, i) => ({ key: `e${i}`, kind: 'existing', url: path, path }));
+const photoSignature = (list) => list.map((p) => (p.kind === 'existing' ? p.path : `${p.name}:${p.size}`)).join('|');
 
 const isTouch = () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+let uid = 0;
 
-// Add mode (default) creates a product. Pass `product` to edit an existing one: the form is prefilled,
-// the current photo is kept unless replaced or removed, and saving calls onSaved instead of showing "Product added".
+// Add mode (default) creates a product. Pass `product` to edit an existing one: the form is prefilled and the
+// photos can be reordered, removed or added. Saving calls onSaved instead of showing "Product added".
 export default function ProductForm({ token, brands = [], onCreated, onViewInventory, product, onSaved, onCancel }) {
   const isEdit = !!product;
   const [fields, setFields] = useState(() => (product ? fieldsFromProduct(product) : EMPTY));
-  const initialRef = useRef(fields);
-  const [removeExisting, setRemoveExisting] = useState(false);
-  const existingUrl = product?.image_url || null;
+  const [photos, setPhotos] = useState(() => (product ? existingPhotos(product) : []));
+  const initialRef = useRef({ fields, photos: photoSignature(photos) });
   const [errors, setErrors] = useState({});
-  const [photo, setPhoto] = useState(null);            // { file, url, name, originalSize, size, width, height, resized }
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const [photoError, setPhotoError] = useState('');
+  const [busy, setBusy] = useState(0);                  // photos being prepared
+  const [photoMsg, setPhotoMsg] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [phase, setPhase] = useState('editing');       // editing | uploading | done
+  const [phase, setPhase] = useState('editing');        // editing | uploading | done
   const [progress, setProgress] = useState(0);
   const [submitError, setSubmitError] = useState('');
   const [askNoPhoto, setAskNoPhoto] = useState(false);
-  const [created, setCreated] = useState(null);        // { product, photoUrl }
+  const [created, setCreated] = useState(null);         // { product, photoUrl, urls }
 
   const galleryRef = useRef(null);
   const cameraRef = useRef(null);
   const abortRef = useRef(null);
-  const photoUrlRef = useRef(null);
+  const urlsRef = useRef(new Set());                    // object URLs to free
   const rootRef = useRef(null);
   const touch = isTouch();
 
-  // Free the preview image when the photo changes or the form goes away
-  useEffect(() => {
-    photoUrlRef.current = photo?.url || null;
-  }, [photo]);
   useEffect(() => () => {
-    if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
+    urlsRef.current.forEach((u) => URL.revokeObjectURL(u));
     abortRef.current?.abort();
   }, []);
 
@@ -76,49 +79,64 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
   };
   const onChange = (e) => setField(e.target.name, e.target.value);
 
-  // ── photo ────────────────────────────────────────────────
-  const acceptFile = useCallback(async (file) => {
-    if (!file) return;
-    setPhotoError('');
+  // ── photos ───────────────────────────────────────────────
+  const room = MAX_PHOTOS - photos.length - busy;
+
+  const addFiles = useCallback(async (fileList, free) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
     setAskNoPhoto(false);
-    setRemoveExisting(false);
-    setPhotoBusy(true);
-    try {
-      const result = await prepareImage(file);
-      setPhoto((prev) => {
-        if (prev?.url) URL.revokeObjectURL(prev.url);
-        return { ...result, name: file.name, url: URL.createObjectURL(result.file) };
-      });
-    } catch (err) {
-      setPhotoError(err.message);
-    } finally {
-      setPhotoBusy(false);
+    setPhotoMsg('');
+    const take = files.slice(0, Math.max(0, free));
+    const skipped = files.length - take.length;
+    const problems = [];
+    setBusy((n) => n + take.length);
+    for (const file of take) {
+      try {
+        const r = await prepareImage(file);
+        const url = URL.createObjectURL(r.file);
+        urlsRef.current.add(url);
+        setPhotos((prev) => {
+          if (prev.length >= MAX_PHOTOS) { URL.revokeObjectURL(url); urlsRef.current.delete(url); return prev; }
+          uid += 1;
+          return [...prev, { key: `n${uid}`, kind: 'new', url, file: r.file, name: file.name, size: r.size, originalSize: r.originalSize, resized: r.resized, width: r.width, height: r.height }];
+        });
+      } catch (err) {
+        problems.push(`${file.name}: ${err.message}`);
+      } finally {
+        setBusy((n) => n - 1);
+      }
     }
+    if (skipped > 0) problems.push(`Only ${MAX_PHOTOS} photos fit per product. ${skipped} extra ${skipped === 1 ? 'photo was' : 'photos were'} skipped.`);
+    if (problems.length) setPhotoMsg(problems.join(' '));
   }, []);
 
   const onPick = (e) => {
-    const file = e.target.files?.[0];
+    const picked = Array.from(e.target.files || []);
     e.target.value = '';           // lets the same file be chosen again
-    acceptFile(file);
+    addFiles(picked, room);
   };
   const onDrop = (e) => {
     e.preventDefault();
     setDragOver(false);
-    acceptFile(e.dataTransfer.files?.[0]);
+    addFiles(e.dataTransfer.files, room);
   };
-  const keepingExisting = !!existingUrl && !removeExisting;
-  const showPreview = !!photo || keepingExisting;
-  const previewSrc = photo?.url || existingUrl;
-  const undoVisible = !!photo && keepingExisting;     // a new photo is chosen and the old one can come back
-
-  // With a new photo chosen this undoes it (the current photo returns); otherwise it removes the current photo.
-  const removePhoto = () => {
-    if (photo) {
-      setPhoto((prev) => { if (prev?.url) URL.revokeObjectURL(prev.url); return null; });
-      setPhotoError('');
-    } else if (keepingExisting) {
-      setRemoveExisting(true);
-    }
+  const removeAt = (i) => {
+    setPhotos((prev) => {
+      const gone = prev[i];
+      if (gone?.kind === 'new') { URL.revokeObjectURL(gone.url); urlsRef.current.delete(gone.url); }
+      return prev.filter((_, idx) => idx !== i);
+    });
+    setPhotoMsg('');
+  };
+  const move = (i, dir) => {
+    setPhotos((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = prev.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
   };
   const openGallery = () => galleryRef.current?.click();
   const openCamera = () => cameraRef.current?.click();
@@ -137,10 +155,10 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
 
   const submit = async (ev, { withoutPhoto = false } = {}) => {
     ev?.preventDefault();
-    if (phase === 'uploading' || photoBusy) return;
+    if (phase === 'uploading' || busy > 0) return;
     setSubmitError('');
     if (!validate()) return;
-    if (!isEdit && !photo && !withoutPhoto) {
+    if (!isEdit && photos.length === 0 && !withoutPhoto) {
       setAskNoPhoto(true);
       return;
     }
@@ -149,6 +167,8 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
     setProgress(0);
     const controller = new AbortController();
     abortRef.current = controller;
+    let newIndex = 0;
+    const imageOrder = isEdit ? photos.map((p) => (p.kind === 'existing' ? p.path : `new:${newIndex++}`)) : undefined;
     try {
       const saved = await uploadProduct({
         token,
@@ -157,8 +177,8 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
           name: fields.name.trim(), brand: fields.brand.trim(), category: fields.category,
           price_zar: fields.price_zar, price_mwk: fields.price_mwk, description: fields.description.trim(),
         },
-        image: photo?.file,
-        removeImage: removeExisting && !photo,
+        images: photos.filter((p) => p.kind === 'new').map((p) => p.file),
+        imageOrder,
         onProgress: setProgress,
         signal: controller.signal,
       });
@@ -166,8 +186,8 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
         onSaved?.(saved);              // the parent closes the form
         return;
       }
-      setCreated({ product: saved, photoUrl: photo?.url || null });
-      setPhoto(null);                  // the done card keeps its own copy of the preview URL
+      setCreated({ product: saved, photoUrl: photos[0]?.url || null, urls: photos.map((p) => p.url) });
+      setPhotos([]);                   // the done card keeps its own copy of the preview URL
       setPhase('done');
       onCreated?.(saved);
     } catch (err) {
@@ -180,18 +200,19 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
 
   const cancelUpload = () => abortRef.current?.abort();
 
-  const dirty = JSON.stringify(fields) !== JSON.stringify(initialRef.current) || !!photo || removeExisting;
+  const dirty = JSON.stringify(fields) !== JSON.stringify(initialRef.current.fields) || photoSignature(photos) !== initialRef.current.photos;
   const cancelEdit = () => {
     if (dirty && !window.confirm('Discard your changes?')) return;
     onCancel?.();
   };
 
   const addAnother = () => {
-    if (created?.photoUrl) URL.revokeObjectURL(created.photoUrl);
+    (created?.urls || []).forEach((u) => { URL.revokeObjectURL(u); urlsRef.current.delete(u); });
     setCreated(null);
     // keep brand and category: admins usually add several items in a row
     setFields((f) => ({ ...EMPTY, brand: f.brand, category: f.category }));
     setErrors({});
+    setPhotoMsg('');
     setPhase('editing');
     setProgress(0);
     rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -200,6 +221,7 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
   // ── done ─────────────────────────────────────────────────
   if (phase === 'done' && created) {
     const p = created.product;
+    const n = (p.images || []).length;
     return (
       <div ref={rootRef} style={{ maxWidth: '520px', margin: '0 auto', textAlign: 'center', padding: '1rem 0' }}>
         <div style={{ width: '120px', height: '150px', margin: '0 auto 1.25rem', borderRadius: '10px', overflow: 'hidden', background: 'var(--color-secondary-dark)', border: '1px solid rgba(212,175,55,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -212,7 +234,7 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
           Product added
         </h2>
         <p style={{ color: 'var(--color-muted-gray)', fontSize: '0.9rem', marginBottom: '1.75rem' }}>
-          {p.name} is now live in the shop{created.photoUrl ? '.' : ', with a placeholder instead of a photo.'}
+          {p.name} is now live in the shop{n > 1 ? ` with ${n} photos.` : n === 1 ? '.' : ', with a placeholder instead of a photo.'}
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
           <button type="button" className="btn-gold" onClick={addAnother} style={{ ...bigBtn, flex: '0 1 220px' }}>
@@ -238,6 +260,8 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
   const zar = Number(fields.price_zar) > 0 ? formatMoney(Number(fields.price_zar), 'ZAR') : null;
   const mwk = Number(fields.price_mwk) > 0 ? formatMoney(Number(fields.price_mwk), 'MWK') : null;
   const brandChips = [DEFAULT_BRAND, ...brands.filter((b) => b !== DEFAULT_BRAND)].slice(0, 8);
+  const hasAny = photos.length > 0;
+  const newPhotos = photos.filter((p) => p.kind === 'new');
 
   return (
     <div ref={rootRef}>
@@ -246,42 +270,50 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
       </h2>
 
       <form noValidate onSubmit={submit} className="pf-grid">
-        {/* ── 1. Photo ─────────────────────────────────── */}
-        <section className="pf-photo" aria-labelledby="pf-photo-h">
-          <h3 id="pf-photo-h" style={stepStyle}><span style={stepNum}>1</span> Photo</h3>
+        {/* ── 1. Photos ────────────────────────────────── */}
+        <section
+          className="pf-photo"
+          aria-labelledby="pf-photo-h"
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+        >
+          <h3 id="pf-photo-h" style={stepStyle}>
+            <span style={stepNum}>1</span> Photos
+            <span className="font-mono" style={{ fontSize: '0.65rem', color: 'var(--color-muted-gray)', letterSpacing: '0.06em', fontWeight: 400 }}>
+              optional, up to {MAX_PHOTOS}
+            </span>
+          </h3>
 
-          <input id="photo-gallery" ref={galleryRef} type="file" accept="image/*" onChange={onPick} style={{ display: 'none' }} />
+          <input id="photo-gallery" ref={galleryRef} type="file" accept="image/*" multiple onChange={onPick} style={{ display: 'none' }} />
           <input id="photo-camera" ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={onPick} style={{ display: 'none' }} />
 
-          {!showPreview ? (
+          {!hasAny ? (
             <div
               role="button"
               tabIndex={0}
-              aria-label="Add a photo"
-              onClick={() => !photoBusy && openGallery()}
-              onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !photoBusy) { e.preventDefault(); openGallery(); } }}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={onDrop}
+              aria-label="Add photos"
+              onClick={() => busy === 0 && openGallery()}
+              onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && busy === 0) { e.preventDefault(); openGallery(); } }}
               style={{
                 border: `2px dashed ${dragOver ? 'var(--color-accent-gold)' : 'rgba(142,142,147,0.3)'}`,
                 background: dragOver ? 'rgba(212,175,55,0.06)' : 'var(--color-secondary-dark)',
                 borderRadius: '12px', padding: '2rem 1.25rem', textAlign: 'center',
-                cursor: photoBusy ? 'progress' : 'pointer', transition: 'all 0.2s ease', minHeight: '240px',
+                cursor: busy ? 'progress' : 'pointer', transition: 'all 0.2s ease', minHeight: '240px',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
               }}
             >
-              {photoBusy ? (
+              {busy > 0 ? (
                 <>
-                  <Loader2 size={30} className="pf-spin" style={{ color: 'var(--color-accent-gold)', animation: 'spin 0.9s linear infinite' }} />
+                  <Loader2 size={30} style={{ color: 'var(--color-accent-gold)', animation: 'spin 0.9s linear infinite' }} />
                   <p style={{ color: 'var(--color-neutral-light)', fontSize: '0.92rem' }}>Preparing photo...</p>
                 </>
               ) : (
                 <>
                   <ImagePlus size={34} style={{ color: 'var(--color-muted-gold)', opacity: 0.7 }} />
-                  <p style={{ color: 'var(--color-neutral-light)', fontSize: '1rem', fontWeight: 600 }}>Add a photo</p>
-                  <p style={{ color: 'var(--color-muted-gray)', fontSize: '0.78rem', maxWidth: '260px', lineHeight: 1.5 }}>
-                    A clear photo on a plain background works best. Large photos are shrunk automatically.
+                  <p style={{ color: 'var(--color-neutral-light)', fontSize: '1rem', fontWeight: 600 }}>Add photos</p>
+                  <p style={{ color: 'var(--color-muted-gray)', fontSize: '0.78rem', maxWidth: '270px', lineHeight: 1.5 }}>
+                    Up to {MAX_PHOTOS} photos. The first one is the main photo in the shop. Large photos are shrunk automatically.
                   </p>
                   <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginTop: '0.75rem' }}>
                     {touch && (
@@ -290,18 +322,18 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
                       </button>
                     )}
                     <button type="button" className={touch ? 'btn-outline-gold' : 'btn-gold'} style={bigBtn} onClick={(e) => { e.stopPropagation(); openGallery(); }}>
-                      <ImagePlus size={16} /><span>{touch ? 'From gallery' : 'Choose photo'}</span>
+                      <ImagePlus size={16} /><span>{touch ? 'From gallery' : 'Choose photos'}</span>
                     </button>
                   </div>
-                  {!touch && <p className="font-mono" style={{ fontSize: '0.62rem', color: 'var(--color-muted-gray)', letterSpacing: '0.08em', marginTop: '0.5rem' }}>or drop an image here</p>}
+                  {!touch && <p className="font-mono" style={{ fontSize: '0.62rem', color: 'var(--color-muted-gray)', letterSpacing: '0.08em', marginTop: '0.5rem' }}>or drop images here</p>}
                 </>
               )}
             </div>
           ) : (
             <div>
-              {/* Preview, framed and captioned like the shop card */}
+              {/* Main photo, framed and captioned like the shop card */}
               <div style={{ position: 'relative', aspectRatio: '4 / 5', width: 'min(100%, 300px)', margin: '0 auto', borderRadius: '12px', overflow: 'hidden', background: '#000', border: '1px solid rgba(212,175,55,0.3)' }}>
-                <img src={previewSrc} alt="Selected product" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <img src={photos[0].url} alt="Selected product" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 <div style={{ position: 'absolute', top: '0.75rem', left: '0.75rem', padding: '0.22rem 0.6rem', background: 'rgba(13,13,13,0.8)', border: '1px solid rgba(212,175,55,0.25)', borderRadius: '999px', fontSize: '0.6rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-accent-gold)' }}>
                   {categoryLabel}
                 </div>
@@ -315,43 +347,82 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
                   </p>
                 </div>
               </div>
-              <p className="font-mono" style={{ fontSize: '0.66rem', color: 'var(--color-muted-gray)', letterSpacing: '0.04em', margin: '0.7rem auto', lineHeight: 1.6, maxWidth: '300px' }}>
-                {photo
-                  ? <>{photo.name} &middot; {photo.resized
-                    ? <>{formatBytes(photo.originalSize)} shrunk to {formatBytes(photo.size)} ({photo.width} x {photo.height})</>
-                    : <>{formatBytes(photo.size)} ({photo.width} x {photo.height})</>}</>
-                  : <>Current photo. Replace it or remove it, then save.</>}
-              </p>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', maxWidth: '300px', margin: '0 auto' }}>
-                {touch && (
-                  <button type="button" className="btn-outline-gold" style={{ padding: '0.55rem 0.9rem', fontSize: '0.76rem' }} onClick={openCamera} disabled={photoBusy || uploading}>
-                    <Camera size={13} /><span>Retake</span>
-                  </button>
+
+              {/* All photos: reorder, remove, add */}
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${MAX_PHOTOS}, minmax(0, 1fr))`, gap: '0.5rem', width: 'min(100%, 300px)', margin: '0.85rem auto 0' }}>
+                {Array.from({ length: MAX_PHOTOS }).map((_, i) => {
+                  const ph = photos[i];
+                  if (ph) {
+                    return (
+                      <div key={ph.key} data-testid="photo-tile" style={{ position: 'relative', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: `1px solid ${i === 0 ? 'var(--color-accent-gold)' : 'rgba(142,142,147,0.3)'}`, background: '#111' }}>
+                        <img src={ph.url} alt={`Photo ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        {i === 0 && (
+                          <span className="font-mono" style={{ position: 'absolute', top: '3px', left: '3px', fontSize: '0.5rem', letterSpacing: '0.1em', background: 'var(--color-accent-gold)', color: '#0D0D0D', padding: '1px 4px', borderRadius: '3px', fontWeight: 700 }}>MAIN</span>
+                        )}
+                        <button type="button" aria-label={`Remove photo ${i + 1}`} disabled={uploading} onClick={() => removeAt(i)}
+                          style={{ ...tileBtn, position: 'absolute', top: '3px', right: '3px', color: '#f87171' }}>
+                          <X size={12} />
+                        </button>
+                        <div style={{ position: 'absolute', left: 0, right: 0, bottom: '3px', display: 'flex', justifyContent: 'space-between', padding: '0 3px' }}>
+                          <button type="button" aria-label={`Move photo ${i + 1} left`} disabled={uploading || i === 0} onClick={() => move(i, -1)}
+                            style={{ ...tileBtn, opacity: i === 0 ? 0.25 : 1 }}><ChevronLeft size={13} /></button>
+                          <button type="button" aria-label={`Move photo ${i + 1} right`} disabled={uploading || i === photos.length - 1} onClick={() => move(i, 1)}
+                            style={{ ...tileBtn, opacity: i === photos.length - 1 ? 0.25 : 1 }}><ChevronRight size={13} /></button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (i < photos.length + busy) {
+                    return (
+                      <div key={`busy${i}`} style={{ aspectRatio: '1', borderRadius: '8px', border: '1px dashed rgba(212,175,55,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Loader2 size={18} style={{ color: 'var(--color-accent-gold)', animation: 'spin 0.9s linear infinite' }} />
+                      </div>
+                    );
+                  }
+                  const canAdd = i === photos.length + busy && room > 0;
+                  return (
+                    <button key={`empty${i}`} type="button" aria-label={canAdd ? 'Add another photo' : undefined} disabled={!canAdd || uploading} onClick={openGallery}
+                      style={{ aspectRatio: '1', borderRadius: '8px', border: '1px dashed rgba(142,142,147,0.35)', background: 'transparent', color: 'var(--color-muted-gray)', cursor: canAdd ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: canAdd ? 1 : 0.45 }}>
+                      {canAdd ? <Plus size={18} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ width: 'min(100%, 300px)', margin: '0.7rem auto 0' }}>
+                <p className="font-mono" style={{ fontSize: '0.66rem', color: 'var(--color-muted-gray)', letterSpacing: '0.04em', lineHeight: 1.6 }}>
+                  {photos.length} of {MAX_PHOTOS} photos. The first is the main photo in the shop.
+                </p>
+                {newPhotos.map((p) => (
+                  <p key={p.key} className="font-mono" style={{ fontSize: '0.62rem', color: 'var(--color-muted-gray)', letterSpacing: '0.03em', lineHeight: 1.5, wordBreak: 'break-all' }}>
+                    {p.name}: {p.resized
+                      ? <>{formatBytes(p.originalSize)} shrunk to {formatBytes(p.size)} ({p.width} x {p.height})</>
+                      : <>{formatBytes(p.size)} ({p.width} x {p.height})</>}
+                  </p>
+                ))}
+                {room > 0 && (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.7rem' }}>
+                    {touch && (
+                      <button type="button" className="btn-outline-gold" style={{ padding: '0.55rem 0.9rem', fontSize: '0.76rem' }} onClick={openCamera} disabled={uploading}>
+                        <Camera size={13} /><span>Take photo</span>
+                      </button>
+                    )}
+                    <button type="button" className="btn-outline-gold" style={{ padding: '0.55rem 0.9rem', fontSize: '0.76rem' }} onClick={openGallery} disabled={uploading}>
+                      <ImagePlus size={13} /><span>{touch ? 'From gallery' : 'Add photos'}</span>
+                    </button>
+                  </div>
                 )}
-                <button type="button" className="btn-outline-gold" style={{ padding: '0.55rem 0.9rem', fontSize: '0.76rem' }} onClick={openGallery} disabled={photoBusy || uploading}>
-                  <RefreshCw size={13} /><span>Replace</span>
-                </button>
-                <button type="button" onClick={removePhoto} disabled={uploading}
-                  style={{ padding: '0.55rem 0.9rem', fontSize: '0.76rem', background: 'none', border: `1px solid ${undoVisible ? 'rgba(142,142,147,0.4)' : 'rgba(239,68,68,0.4)'}`, color: undoVisible ? 'var(--color-muted-gray)' : '#ef4444', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Trash2 size={13} /><span>{undoVisible ? 'Keep current photo' : 'Remove'}</span>
-                </button>
+                {room <= 0 && busy === 0 && (
+                  <p style={{ fontSize: '0.74rem', color: 'var(--color-muted-gray)', marginTop: '0.6rem' }}>Remove a photo to add a different one.</p>
+                )}
               </div>
             </div>
           )}
 
-          {removeExisting && !photo && (
-            <p style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--color-muted-gray)' }}>
-              The current photo will be removed when you save.{' '}
-              <button type="button" onClick={() => setRemoveExisting(false)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-accent-gold)', textDecoration: 'underline', cursor: 'pointer', fontSize: 'inherit' }}>
-                Keep current photo
-              </button>
-            </p>
-          )}
-
           <div aria-live="polite">
-            {photoError && (
+            {photoMsg && (
               <p className="pf-error-text" role="alert" style={{ fontSize: '0.82rem', marginTop: '0.75rem' }}>
-                <AlertCircle size={14} style={{ flexShrink: 0 }} />{photoError}
+                <AlertCircle size={14} style={{ flexShrink: 0 }} />{photoMsg}
               </p>
             )}
           </div>
@@ -476,10 +547,10 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
                   <span>Cancel</span>
                 </button>
               )}
-              <button key="submit" type="submit" className="btn-gold" disabled={photoBusy}
-                style={{ flex: 1, justifyContent: 'center', padding: '0.95rem', fontSize: '0.9rem', opacity: photoBusy ? 0.6 : 1 }}>
+              <button key="submit" type="submit" className="btn-gold" disabled={busy > 0}
+                style={{ flex: 1, justifyContent: 'center', padding: '0.95rem', fontSize: '0.9rem', opacity: busy > 0 ? 0.6 : 1 }}>
                 {isEdit ? <CheckCircle2 size={16} /> : <PlusCircle size={16} />}
-                <span>{photoBusy ? 'Preparing photo...' : submitError ? 'Try again' : isEdit ? 'Save changes' : 'Add to inventory'}</span>
+                <span>{busy > 0 ? 'Preparing photos...' : submitError ? 'Try again' : isEdit ? 'Save changes' : 'Add to inventory'}</span>
               </button>
             </div>
           )}

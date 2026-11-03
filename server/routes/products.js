@@ -12,6 +12,7 @@ const DEFAULT_BRAND = 'CTW';
 const MAX_BRAND_LEN = 100;
 const CATEGORIES = ['men', 'women', 'hoodies', 'caps', 'shoes'];
 const MAX_IDS = 50;
+const MAX_IMAGES = 4;
 
 // --- Multer ---
 const uploadDir = path.join(__dirname, '..', 'uploads');
@@ -37,7 +38,56 @@ const fileFilter = (_req, file, cb) => {
   }
 };
 
-const upload = multer({ storage, fileFilter, limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 } });
+const upload = multer({ storage, fileFilter, limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024, files: MAX_IMAGES + 1 } });
+// `images` takes up to 4 photos; the older single `image` field is still accepted
+const uploadPhotos = upload.fields([{ name: 'images', maxCount: MAX_IMAGES }, { name: 'image', maxCount: 1 }]);
+
+// ---------------------------------------------------------------------------
+// Photos
+// ---------------------------------------------------------------------------
+const filesOf = (req) => [...((req.files && req.files.images) || []), ...((req.files && req.files.image) || [])];
+const urlOf = (file) => `/uploads/${file.filename}`;
+const discardFiles = (files) => files.forEach((f) => fs.unlink(f.path, () => {}));
+
+// Attach `images` (ordered URLs, first = main) to product rows. If the product_images table is missing
+// (migration not run yet) fall back to the single image_url so the shop keeps working.
+async function withImages(rows) {
+  if (!rows.length) return rows;
+  let byProduct = new Map();
+  try {
+    const [imgs] = await db.query(
+      'SELECT product_id, url FROM product_images WHERE product_id IN (?) ORDER BY product_id, position',
+      [rows.map((r) => r.id)]
+    );
+    imgs.forEach((i) => {
+      if (!byProduct.has(i.product_id)) byProduct.set(i.product_id, []);
+      byProduct.get(i.product_id).push(i.url);
+    });
+  } catch (err) {
+    console.error('[photos] product_images unavailable, falling back to image_url:', err.message);
+    byProduct = new Map();
+  }
+  return rows.map((r) => {
+    const list = byProduct.get(r.id);
+    return { ...r, images: list && list.length ? list : (r.image_url ? [r.image_url] : []) };
+  });
+}
+
+// Current photos of one product (table first, image_url as a fallback)
+async function currentImages(product) {
+  const [withList] = await withImages([product]);
+  return withList.images;
+}
+
+// Replace a product's photo list inside a transaction and keep image_url as the first photo.
+async function saveImages(conn, productId, urls) {
+  await conn.query('DELETE FROM product_images WHERE product_id = ?', [productId]);
+  for (let i = 0; i < urls.length; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await conn.query('INSERT INTO product_images (product_id, url, position) VALUES (?, ?, ?)', [productId, urls[i], i]);
+  }
+  await conn.query('UPDATE products SET image_url = ? WHERE id = ?', [urls[0] || null, productId]);
+}
 
 // GET /api/products
 // Query: category (men|women|hoodies|caps|shoes), ids (comma list, max 50), page, limit
@@ -72,7 +122,7 @@ router.get('/', async (req, res) => {
     );
 
     res.json({
-      products: rows,
+      products: await withImages(rows),
       pagination: {
         total,
         page: parseInt(page),
@@ -101,7 +151,7 @@ router.get('/brands', async (_req, res) => {
 router.get('/picks', async (_req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM products ORDER BY RAND() LIMIT 3');
-    res.json(rows);
+    res.json(await withImages(rows));
   } catch (err) {
     console.error('[GET /products/picks]', err);
     res.status(500).json({ error: 'Failed to fetch picks' });
@@ -113,7 +163,7 @@ router.get('/:id', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM products WHERE id = ?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Product not found' });
-    res.json(rows[0]);
+    res.json((await withImages(rows))[0]);
   } catch (err) {
     console.error('[GET /products/:id]', err);
     res.status(500).json({ error: 'Failed to fetch product' });
@@ -164,41 +214,60 @@ function removeUpload(imageUrl) {
 }
 
 // POST /api/products — admin only
-router.post('/', requireAuth, requireAdmin, upload.single('image'), async (req, res) => {
-  // Remove the already-saved upload if we reject the request
+// Multipart: name, brand, category, price_zar, price_mwk, description, and up to 4 `images` (first = main).
+router.post('/', requireAuth, requireAdmin, uploadPhotos, async (req, res) => {
+  const files = filesOf(req);
+  // Remove the already-saved uploads if we reject the request
   const reject = (status, error) => {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    discardFiles(files);
     return res.status(status).json({ error });
   };
 
   try {
     const parsed = readProductFields(req.body);
     if (parsed.error) return reject(400, parsed.error);
+    if (files.length > MAX_IMAGES) return reject(400, `You can add up to ${MAX_IMAGES} photos per product.`);
     const v = parsed.values;
+    const urls = files.map(urlOf);
 
-    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const conn = await db.getConnection();
+    let productId;
+    try {
+      await conn.beginTransaction();
+      // `price` is the legacy column, kept as a mirror of price_mwk (see migrations/001)
+      const [result] = await conn.query(
+        'INSERT INTO products (name, brand, category, price, price_mwk, price_zar, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [v.name, v.brand, v.category, v.mwk, v.mwk, v.zar, v.description, urls[0] || null]
+      );
+      productId = result.insertId;
+      await saveImages(conn, productId, urls);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
 
-    // `price` is the legacy column, kept as a mirror of price_mwk (see migrations/001)
-    const [result] = await db.query(
-      'INSERT INTO products (name, brand, category, price, price_mwk, price_zar, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [v.name, v.brand, v.category, v.mwk, v.mwk, v.zar, v.description, imageUrl]
-    );
-
-    const [newProduct] = await db.query('SELECT * FROM products WHERE id = ?', [result.insertId]);
-    res.status(201).json(newProduct[0]);
+    const [created] = await db.query('SELECT * FROM products WHERE id = ?', [productId]);
+    res.status(201).json((await withImages(created))[0]);
   } catch (err) {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    discardFiles(files);
     console.error('[POST /products]', err);
     res.status(500).json({ error: 'Failed to create product' });
   }
 });
 
 // PUT /api/products/:id — admin only
-// Same fields as create. Image: send a new `image` to replace it, or remove_image=1 to clear it;
-// otherwise the current image is kept. The old file is deleted only after the update succeeds.
-router.put('/:id', requireAuth, requireAdmin, upload.single('image'), async (req, res) => {
+// Same fields as create. Photos are set with `image_order`, a JSON list in the wanted order where each
+// entry is either an existing photo URL of this product or "new:0", "new:1" (the uploaded `images`, in order).
+// Anything not listed is removed. Without image_order the old rules apply: a new `image` replaces all
+// photos, remove_image=1 clears them, otherwise photos are kept. Removed files are deleted only after
+// the update succeeds.
+router.put('/:id', requireAuth, requireAdmin, uploadPhotos, async (req, res) => {
+  const files = filesOf(req);
   const reject = (status, error) => {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    discardFiles(files);
     return res.status(status).json({ error });
   };
 
@@ -209,27 +278,66 @@ router.put('/:id', requireAuth, requireAdmin, upload.single('image'), async (req
     const [rows] = await db.query('SELECT * FROM products WHERE id = ?', [id]);
     if (!rows.length) return reject(404, 'Product not found');
     const existing = rows[0];
+    const existingUrls = await currentImages(existing);
 
     const parsed = readProductFields(req.body, existing.category);
     if (parsed.error) return reject(400, parsed.error);
     const v = parsed.values;
 
-    const removeImage = ['1', 'true'].includes(String(req.body.remove_image));
-    let imageUrl = existing.image_url;
-    if (req.file) imageUrl = `/uploads/${req.file.filename}`;
-    else if (removeImage) imageUrl = null;
+    // Work out the final ordered photo list
+    let finalUrls;
+    const usedFiles = new Set();
+    if (req.body.image_order !== undefined) {
+      let order;
+      try { order = JSON.parse(req.body.image_order); } catch { return reject(400, 'The photo list is not valid.'); }
+      if (!Array.isArray(order)) return reject(400, 'The photo list is not valid.');
+      finalUrls = [];
+      for (const entry of order) {
+        if (typeof entry !== 'string') return reject(400, 'The photo list is not valid.');
+        if (entry.startsWith('new:')) {
+          const n = Number(entry.slice(4));
+          if (!Number.isInteger(n) || n < 0 || n >= files.length || usedFiles.has(n)) return reject(400, 'The photo list is not valid.');
+          usedFiles.add(n);
+          finalUrls.push(urlOf(files[n]));
+        } else {
+          if (!existingUrls.includes(entry) || finalUrls.includes(entry)) return reject(400, 'The photo list is not valid.');
+          finalUrls.push(entry);
+        }
+      }
+    } else if (files.length) {
+      finalUrls = files.map(urlOf);
+      files.forEach((_f, i) => usedFiles.add(i));
+    } else if (['1', 'true'].includes(String(req.body.remove_image))) {
+      finalUrls = [];
+    } else {
+      finalUrls = existingUrls;
+    }
+    if (finalUrls.length > MAX_IMAGES) return reject(400, `You can add up to ${MAX_IMAGES} photos per product.`);
 
-    await db.query(
-      'UPDATE products SET name = ?, brand = ?, category = ?, price = ?, price_mwk = ?, price_zar = ?, description = ?, image_url = ? WHERE id = ?',
-      [v.name, v.brand, v.category, v.mwk, v.mwk, v.zar, v.description, imageUrl, id]
-    );
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(
+        'UPDATE products SET name = ?, brand = ?, category = ?, price = ?, price_mwk = ?, price_zar = ?, description = ? WHERE id = ?',
+        [v.name, v.brand, v.category, v.mwk, v.mwk, v.zar, v.description, id]
+      );
+      await saveImages(conn, id, finalUrls);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
 
-    if (existing.image_url && existing.image_url !== imageUrl) removeUpload(existing.image_url);
+    // Success: delete photos that are no longer used, and uploads that were not referenced
+    existingUrls.filter((u) => !finalUrls.includes(u)).forEach(removeUpload);
+    discardFiles(files.filter((_f, i) => !usedFiles.has(i)));
 
     const [updated] = await db.query('SELECT * FROM products WHERE id = ?', [id]);
-    res.json(updated[0]);
+    res.json((await withImages(updated))[0]);
   } catch (err) {
-    if (req.file) fs.unlink(req.file.path, () => {});
+    discardFiles(files);
     console.error('[PUT /products/:id]', err);
     res.status(500).json({ error: 'Failed to update product' });
   }
@@ -238,16 +346,12 @@ router.put('/:id', requireAuth, requireAdmin, upload.single('image'), async (req
 // DELETE /api/products/:id — admin only
 router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT image_url FROM products WHERE id = ?', [req.params.id]);
+    const [rows] = await db.query('SELECT * FROM products WHERE id = ?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Product not found' });
 
-    const imageUrl = rows[0].image_url;
-    if (imageUrl) {
-      const filePath = path.join(__dirname, '..', imageUrl);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    }
-
-    await db.query('DELETE FROM products WHERE id = ?', [req.params.id]);
+    const urls = await currentImages(rows[0]);
+    await db.query('DELETE FROM products WHERE id = ?', [req.params.id]);   // product_images rows go with it
+    urls.forEach(removeUpload);
     res.json({ message: 'Product deleted' });
   } catch (err) {
     console.error('[DELETE /products/:id]', err);

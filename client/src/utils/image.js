@@ -2,8 +2,8 @@
 // Phone photos are often 4 to 15 MB. Resizing to 1600px and re-encoding as JPEG brings them to a few
 // hundred KB, which uploads fast on mobile data and stays under any proxy size limit.
 const MAX_SIDE = 1600;
-const TARGET_BYTES = 900 * 1024;
-const SKIP_BELOW_BYTES = 700 * 1024;
+const TARGET_BYTES = 650 * 1024;
+const SKIP_BELOW_BYTES = 500 * 1024;
 const RAW_LIMIT_BYTES = 40 * 1024 * 1024;
 const FINAL_LIMIT_BYTES = 7.5 * 1024 * 1024;
 const KEEP_AS_IS = ['image/jpeg', 'image/png', 'image/webp'];

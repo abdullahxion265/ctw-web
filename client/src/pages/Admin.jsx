@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Toast from '../components/Toast';
 import ProductForm from '../components/ProductForm';
+import { photosOf } from '../utils/photos';
 import { API_BASE, CATEGORIES } from '../config';
 import { formatMoney, getPrice } from '../utils/currency';
 
@@ -216,11 +217,18 @@ export default function Admin() {
                       }}
                     >
                       {/* Thumbnail */}
-                      <div style={{ width: '54px', height: '54px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {p.image_url
-                          ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <Shirt size={20} style={{ color: 'var(--color-muted-gold)', opacity: 0.4 }} />
-                        }
+                      <div style={{ position: 'relative', width: '54px', height: '54px', flexShrink: 0 }}>
+                        <div style={{ width: '100%', height: '100%', borderRadius: '6px', overflow: 'hidden', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {photosOf(p)[0]
+                            ? <img src={photosOf(p)[0]} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : <Shirt size={20} style={{ color: 'var(--color-muted-gold)', opacity: 0.4 }} />
+                          }
+                        </div>
+                        {photosOf(p).length > 1 && (
+                          <span className="font-mono" title={`${photosOf(p).length} photos`} style={{ position: 'absolute', right: '-6px', bottom: '-6px', background: 'var(--color-accent-gold)', color: '#0D0D0D', borderRadius: '999px', fontSize: '0.58rem', fontWeight: 700, padding: '1px 5px', border: '2px solid var(--color-secondary-dark)' }}>
+                            {photosOf(p).length}
+                          </span>
+                        )}
                       </div>
 
                       {/* Info */}

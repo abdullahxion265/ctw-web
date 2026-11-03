@@ -5,6 +5,8 @@ import ProductCard from '../components/ProductCard';
 import SkeletonCard from '../components/SkeletonCard';
 import { API_BASE, APP_TAGLINE } from '../config';
 import { LogoFull } from '../components/Logo';
+import ServiceStrip from '../components/ServiceStrip';
+import FollowUs from '../components/FollowUs';
 
 export default function Home() {
   const [picks, setPicks] = useState([]);
@@ -121,15 +123,11 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── FOOTER ───────────────────────────────────────────── */}
-      <footer style={{ borderTop: '1px solid rgba(170,124,17,0.12)', padding: '3rem 1.5rem', textAlign: 'center' }}>
-        <div className="container-max">
-          <LogoFull width={170} style={{ margin: '0 auto 1.25rem' }} />
-          <p className="font-mono" style={{ fontSize: '0.68rem', color: 'var(--color-muted-gray)', letterSpacing: '0.08em' }}>
-            &copy; {new Date().getFullYear()} CarterTheTownWear. All rights reserved.
-          </p>
-        </div>
-      </footer>
+      {/* ── ORDERING FACTS (delivery) ────────────────────────── */}
+      <ServiceStrip />
+
+      {/* ── FOLLOW US ────────────────────────────────────────── */}
+      <FollowUs />
     </main>
   );
 }

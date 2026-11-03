@@ -3,9 +3,11 @@ import { Eye, Shirt, Plus, Check } from 'lucide-react';
 import ProductModal from './ProductModal';
 import { useCurrency } from '../context/CurrencyContext';
 import { useCart } from '../context/CartContext';
+import ImageCarousel from './ImageCarousel';
+import { photosOf } from '../utils/photos';
 
 export default function ProductCard({ product, featured = false }) {
-  const [imgError, setImgError] = useState(false);
+  const photos = photosOf(product);
   const [hovered, setHovered] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const { priceOf } = useCurrency();
@@ -32,12 +34,20 @@ export default function ProductCard({ product, featured = false }) {
       >
         {/* Image */}
         <div className="card-image-wrap" style={{ height: imageHeight }}>
-          {product.image_url && !imgError ? (
-            <img src={product.image_url} alt={product.name} onError={() => setImgError(true)} />
-          ) : (
-            <div className="img-placeholder" style={{ height: imageHeight }}>
-              <Shirt size={34} style={{ color: 'var(--color-muted-gold)', opacity: 0.45 }} />
-              <span style={{ fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>No Image</span>
+          <ImageCarousel
+            images={photos}
+            alt={product.name}
+            placeholder={(
+              <div className="img-placeholder" style={{ height: imageHeight }}>
+                <Shirt size={34} style={{ color: 'var(--color-muted-gold)', opacity: 0.45 }} />
+                <span style={{ fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>No Image</span>
+              </div>
+            )}
+          />
+
+          {photos.length > 1 && (
+            <div aria-hidden="true" style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', zIndex: 2, padding: '0.2rem 0.5rem', background: 'rgba(13,13,13,0.8)', border: '1px solid rgba(212,175,55,0.25)', borderRadius: '999px', fontSize: '0.6rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', color: 'var(--color-neutral-light)', pointerEvents: 'none' }}>
+              {photos.length} photos
             </div>
           )}
 
@@ -62,7 +72,7 @@ export default function ProductCard({ product, featured = false }) {
           </div>
 
           {/* Hover overlay */}
-          <div
+          <div className="quick-view-overlay"
             style={{
               position: 'absolute',
               inset: 0,
@@ -73,12 +83,13 @@ export default function ProductCard({ product, featured = false }) {
               gap: '0.75rem',
               opacity: hovered ? 1 : 0,
               transition: 'opacity 0.3s ease',
+              pointerEvents: 'none',
             }}
           >
             <button
               onClick={() => setShowModal(true)}
               className="btn-gold"
-              style={{ padding: '0.6rem 1.2rem', fontSize: '0.75rem' }}
+              style={{ padding: '0.6rem 1.2rem', fontSize: '0.75rem', pointerEvents: hovered ? 'auto' : 'none' }}
             >
               <Eye size={13} />
               <span>Quick View</span>

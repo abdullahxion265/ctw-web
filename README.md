@@ -89,7 +89,7 @@ Products are tagged **Men**, **Women**, **Hoodies**, **Caps** or **Shoes** when 
 
 The Add Product tab is photo-first: 1 Photo, 2 Details, 3 Prices, then the submit button, which sticks to the bottom of the screen on phones.
 
-- **Photo:** Take photo (phones) or choose from the gallery or files, or drop an image on desktop. Photos are resized in the browser to 1600px and re-encoded as JPEG (target under 900 KB), so 5 to 15 MB phone photos upload quickly on mobile data and never hit a size limit. Rotation from the phone camera is applied. Code: `client/src/utils/image.js`.
+- **Photos:** up to 4 per product, all optional. Take photo (phones), choose several from the gallery or files at once, or drop images on desktop. The first photo is the main one shown in the shop. Use the arrows on each thumbnail to reorder and the X to remove. Photos are resized in the browser to 1600px and re-encoded as JPEG (target under 900 KB), so 5 to 15 MB phone photos upload quickly on mobile data and never hit a size limit. Rotation from the phone camera is applied. Code: `client/src/utils/image.js`.
 - **Preview:** shown framed like a shop card with the brand, name and both prices updating live.
 - **Submit:** missing fields are flagged under each box, a product with no photo asks first ("Add a photo" or "Add without photo"), upload progress is shown with a Cancel button, and network or server errors give a clear message with Try again. Code: `client/src/components/ProductForm.jsx`, `client/src/utils/upload.js`.
 - **After saving:** Add another product keeps the brand and category for the next one.
@@ -99,12 +99,24 @@ The Add Product tab is photo-first: 1 Photo, 2 Details, 3 Prices, then the submi
 Every row in the Inventory tab has an **Edit** button. It opens the same form, prefilled:
 
 - Change any field: name, brand, category, both prices, description.
-- **Photo:** the current photo is kept unless you Replace it (the new one is resized like any upload, and the old file is deleted from the server after the save succeeds) or Remove it. Choosing a new photo can be undone with Keep current photo.
+- **Photos:** all current photos are shown. Reorder, remove or add (up to 4 in total). Photos you remove are deleted from the server after the save succeeds.
 - **Cancel** asks before discarding unsaved changes.
 - Products from before the dual-currency change that have no Rand price show "R: not set" in the list. Editing one requires entering the Rand price, which fixes it.
 - A retired Kids product can still be edited and keeps its category, but Kids cannot be chosen for any other product.
 
-API: `PUT /api/products/:id` (admin only) takes the same multipart fields as create, plus an optional `image` to replace the photo or `remove_image=1` to clear it. Code: `server/routes/products.js`, `client/src/components/ProductForm.jsx`.
+API: `PUT /api/products/:id` (admin only) takes the same multipart fields as create, plus up to 4 `images` files and an `image_order` JSON list (existing photo URLs and `new:0`, `new:1` for the uploaded files, in the wanted order). Anything not listed is removed. The older single `image` and `remove_image=1` fields still work when `image_order` is absent. Code: `server/routes/products.js`, `client/src/components/ProductForm.jsx`.
+
+## Photos per product
+
+Each product has up to 4 photos. The API returns them as `images` (ordered, first = main) and still returns `image_url` (the first photo) for older clients. Storage is the `product_images` table (migration `003`, and `setup.sql` for new installs); files stay in `server/uploads`. If the table is missing the shop falls back to `image_url`, so a forgotten migration does not take the shop down, but saving products with photos will fail until it is run.
+
+In the shop: product cards show a swipeable strip with dots and a "3 photos" label (arrows on hover for mouse users), and the product popup shows a gallery with thumbnails, arrows and keyboard support. Code: `client/src/components/ImageCarousel.jsx`.
+
+## Follow Us, delivery and footer
+
+- **Follow Us:** a section on the home page plus icons in the site footer (Instagram, TikTok, Facebook, Threads). Edit the links in `SOCIAL_LINKS` in `client/src/config.js` and rebuild. The Facebook link is a post link; replace it with the page link when available.
+- **Delivery:** "Delivery available" is shown on the home page, in the product popup, in the cart (with a prompt to put the delivery area in the notes) and in the footer. The wording is `DELIVERY` in `client/src/config.js`. No fees, areas or timings are promised on the site.
+- **Footer:** one footer for the whole site (`client/src/components/Footer.jsx`), hidden on admin pages.
 
 ## Brands
 
@@ -120,7 +132,10 @@ Each product has a brand. In the admin form the Brand box suggests **CTW** (the 
 
 ## Upgrading an existing database
 
-Run each migration once, in order, as DB root: `sudo mysql < server/migrations/002_categories_hoodies_caps_shoes.sql` (001 is already applied on the live server).
+Run each migration once, in order, as DB root, before deploying the release that needs it (001 and 002 may already be applied; 003 adds multiple photos):
+`sudo mysql < server/migrations/003_product_images.sql`
+
+Earlier note: run each migration once, in order, as DB root: `sudo mysql < server/migrations/002_categories_hoodies_caps_shoes.sql` (001 is already applied on the live server).
 
 ## Structure
 

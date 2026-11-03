@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import CartDrawer from './components/CartDrawer';
+import Footer from './components/Footer';
 import Home from './pages/Home';
 import Browse from './pages/Browse';
 import Admin from './pages/Admin';
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/admin"        element={<ProtectedAdmin />} />
         <Route path="*"             element={<Navigate to="/" replace />} />
       </Routes>
+      <Footer />
     </>
   );
 }

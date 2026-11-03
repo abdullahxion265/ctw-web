@@ -17,7 +17,7 @@ function errorHandler(err, req, res, _next) {
       return res.status(413).json({ error: `Image is too large. Maximum size is ${MAX_UPLOAD_MB} MB.` });
     }
     if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-      return res.status(400).json({ error: 'Unexpected file upload. Send a single image.' });
+      return res.status(400).json({ error: 'Too many files or an unexpected upload. You can add up to 4 photos per product.' });
     }
     return res.status(400).json({ error: 'Upload failed. Check the image and try again.' });
   }

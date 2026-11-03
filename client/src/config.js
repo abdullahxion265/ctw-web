@@ -7,6 +7,20 @@ export const WHATSAPP_NUMBER = import.meta.env.VITE_WHATSAPP_NUMBER || '27000000
 // Override at build time with VITE_DEFAULT_CURRENCY in client/.env.production.
 export const DEFAULT_CURRENCY = import.meta.env.VITE_DEFAULT_CURRENCY || 'ZAR';
 
+// Social accounts shown in the Follow Us section and the footer. Change a link here and rebuild.
+export const SOCIAL_LINKS = [
+  { id: 'instagram', label: 'Instagram', sub: '@carter_the_town_wear_', url: 'https://www.instagram.com/carter_the_town_wear_/' },
+  { id: 'tiktok',    label: 'TikTok',    sub: 'Watch our videos',       url: 'https://vt.tiktok.com/ZSgK4jeyJ/' },
+  { id: 'facebook',  label: 'Facebook',  sub: 'Follow on Facebook',     url: 'https://www.facebook.com/100087507815896/posts/1076516918608559/' },
+  { id: 'threads',   label: 'Threads',   sub: '@carter_the_town_wear_', url: 'https://www.threads.com/@carter_the_town_wear_' },
+];
+
+// Shown near ordering (product popup, cart, home page, footer). No fees or areas are promised here.
+export const DELIVERY = {
+  title: 'Delivery available',
+  note: 'Tell us your area when you order and we will arrange delivery.',
+};
+
 export const APP_NAME = 'CarterTheTownWear';
 export const APP_TAGLINE = 'Dressed for the town.';
 

@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { X, Shirt, MessageCircle, Tag, Layers, ShoppingCart } from 'lucide-react';
 import { WHATSAPP_NUMBER, APP_NAME } from '../config';
 import { useCart } from '../context/CartContext';
+import ImageCarousel from './ImageCarousel';
+import DeliveryNote from './DeliveryNote';
+import { photosOf } from '../utils/photos';
 import { useCurrency } from '../context/CurrencyContext';
 import { formatProductPrice } from '../utils/currency';
 
@@ -19,6 +22,7 @@ function buildWhatsAppUrl(product, currency) {
 export default function ProductModal({ product, onClose }) {
   const { currency, priceOf } = useCurrency();
   const { add, openCart } = useCart();
+  const photos = photosOf(product);
   const addAndOpen = () => { add(product, 1); onClose(); openCart(); };
   // Close on Escape
   useEffect(() => {
@@ -80,23 +84,24 @@ export default function ProductModal({ product, onClose }) {
             overflow: 'hidden',
           }}
         >
-          {product.image_url ? (
-            <img
-              src={product.image_url}
-              alt={product.name}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
-            />
-          ) : (
-            <div className="img-placeholder" style={{ height: '100%', minHeight: '320px', width: '100%' }}>
-              <Shirt size={48} style={{ color: 'var(--color-muted-gold)', opacity: 0.4 }} />
-              <span style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-muted-gray)' }}>No Image</span>
-            </div>
-          )}
+          <ImageCarousel
+            images={photos}
+            alt={product.name}
+            arrows="always"
+            thumbs
+            placeholder={(
+              <div className="img-placeholder" style={{ height: '100%', minHeight: '320px', width: '100%' }}>
+                <Shirt size={48} style={{ color: 'var(--color-muted-gold)', opacity: 0.4 }} />
+                <span style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-muted-gray)' }}>No Image</span>
+              </div>
+            )}
+          />
 
           {/* Category badge */}
           <div
             style={{
               position: 'absolute',
+              zIndex: 4,
               top: '1rem',
               left: '1rem',
               padding: '0.3rem 0.8rem',
@@ -207,6 +212,8 @@ export default function ProductModal({ product, onClose }) {
               {priceOf(product)}
             </span>
           </div>
+
+          <DeliveryNote style={{ marginBottom: '1rem' }} />
 
           {/* Add to cart */}
           <button

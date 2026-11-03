@@ -21,6 +21,17 @@ CREATE TABLE IF NOT EXISTS products (
 );
 
 -- Users table (admin + future customer accounts)
+-- Photos: up to 4 per product, position 0 is the main photo (products.image_url mirrors it)
+CREATE TABLE IF NOT EXISTS product_images (
+  id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
+  product_id  INT           NOT NULL,
+  url         VARCHAR(500)  NOT NULL,
+  position    TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_product_position (product_id, position),
+  CONSTRAINT fk_product_images_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS users (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(255)                       NOT NULL,
