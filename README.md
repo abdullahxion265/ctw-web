@@ -112,9 +112,23 @@ Each product has up to 4 photos. The API returns them as `images` (ordered, firs
 
 In the shop: product cards show a swipeable strip with dots and a "3 photos" label (arrows on hover for mouse users), and the product popup shows a gallery with thumbnails, arrows and keyboard support. Code: `client/src/components/ImageCarousel.jsx`.
 
+## Upload size budget (compression)
+
+The host's front server may reject large requests (HTTP 413), and one product can send up to 4 photos at once. So the admin form keeps every upload inside a total size budget (`client/src/utils/uploadBudget.js`, `client/src/utils/image.js`):
+
+- **Default budget: 900 KB per request**, shared by the new photos. One photo may use about 650 KB; two about 420 KB each; four about 210 KB each (and a smaller maximum size, 1024px instead of 1600px). Photos are re-encoded from the original file at submit, so quality is only reduced as much as needed.
+- **Automatic retry:** if the server still answers 413, the budget is halved (900, then 450, then 240 KB) and the upload is retried without the admin doing anything. After the smallest size fails the form says to ask the host to raise the upload size limit.
+- **Remembered for a week:** after a 413 the lower budget is stored in the browser, so the next product does not fail first. After 7 days it resets to the default, in case the host raised the limit.
+- Dropped connections are not treated as size problems (no shrinking, the admin just sees "Could not reach the server" and Try again).
+- If the host raises its limit, raise `DEFAULT_TOTAL_BYTES` in `uploadBudget.js` for sharper photos. Editing a product only counts the NEW photos, existing ones are never re-sent.
+
+## Contact email
+
+The shop's public address is `CONTACT_EMAIL` in `client/src/config.js` (`info@carterthetownwear.com`). It is shown as plain text, deliberately not a link, in the home page strip ("Questions? Email us") and in the footer. `client/index.html` also tells phones not to turn it into a link. Change it in `config.js` and rebuild.
+
 ## Follow Us, delivery and footer
 
-- **Follow Us:** a section on the home page plus icons in the site footer (Instagram, TikTok, Facebook, Threads). Edit the links in `SOCIAL_LINKS` in `client/src/config.js` and rebuild. The Facebook link is a post link; replace it with the page link when available.
+- **Follow Us:** a section on the home page (heading and four cards reading "Follow on <platform>", no handles) plus icons in the site footer (Instagram, TikTok, Facebook, Threads). Edit the links in `SOCIAL_LINKS` in `client/src/config.js` and rebuild. The Facebook link is a post link; replace it with the page link when available.
 - **Delivery:** "Delivery available" is shown on the home page, in the product popup, in the cart (with a prompt to put the delivery area in the notes) and in the footer. The wording is `DELIVERY` in `client/src/config.js`. No fees, areas or timings are promised on the site.
 - **Footer:** one footer for the whole site (`client/src/components/Footer.jsx`), hidden on admin pages.
 

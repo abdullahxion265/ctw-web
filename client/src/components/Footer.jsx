@@ -1,8 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Truck } from 'lucide-react';
+import { Truck, Mail } from 'lucide-react';
 import { LogoFull } from './Logo';
 import SocialIcon from './SocialIcon';
-import { SOCIAL_LINKS, DELIVERY, APP_NAME } from '../config';
+import { SOCIAL_LINKS, DELIVERY, CONTACT_EMAIL, APP_NAME } from '../config';
 
 // Site-wide footer. Hidden on the admin pages.
 export default function Footer() {
@@ -27,9 +27,14 @@ export default function Footer() {
           ))}
         </div>
 
-        <p style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--color-muted-gray)', marginBottom: '1.25rem' }}>
-          <Truck size={15} style={{ color: 'var(--color-accent-gold)' }} aria-hidden="true" /> {DELIVERY.title}
-        </p>
+        <div style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <p style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--color-muted-gray)' }}>
+            <Truck size={15} style={{ color: 'var(--color-accent-gold)' }} aria-hidden="true" /> {DELIVERY.title}
+          </p>
+          <p style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--color-muted-gray)' }}>
+            <Mail size={15} style={{ color: 'var(--color-accent-gold)' }} aria-hidden="true" /> {CONTACT_EMAIL}
+          </p>
+        </div>
 
         <p className="font-mono" style={{ fontSize: '0.68rem', color: 'var(--color-muted-gray)', letterSpacing: '0.08em' }}>
           &copy; {new Date().getFullYear()} {APP_NAME}. All rights reserved.

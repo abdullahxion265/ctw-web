@@ -9,11 +9,14 @@ export const DEFAULT_CURRENCY = import.meta.env.VITE_DEFAULT_CURRENCY || 'ZAR';
 
 // Social accounts shown in the Follow Us section and the footer. Change a link here and rebuild.
 export const SOCIAL_LINKS = [
-  { id: 'instagram', label: 'Instagram', sub: '@carter_the_town_wear_', url: 'https://www.instagram.com/carter_the_town_wear_/' },
-  { id: 'tiktok',    label: 'TikTok',    sub: 'Watch our videos',       url: 'https://vt.tiktok.com/ZSgK4jeyJ/' },
-  { id: 'facebook',  label: 'Facebook',  sub: 'Follow on Facebook',     url: 'https://www.facebook.com/100087507815896/posts/1076516918608559/' },
-  { id: 'threads',   label: 'Threads',   sub: '@carter_the_town_wear_', url: 'https://www.threads.com/@carter_the_town_wear_' },
+  { id: 'instagram', label: 'Instagram', sub: 'Follow on Instagram', url: 'https://www.instagram.com/carter_the_town_wear_/' },
+  { id: 'tiktok',    label: 'TikTok',    sub: 'Follow on TikTok',        url: 'https://vt.tiktok.com/ZSgK4jeyJ/' },
+  { id: 'facebook',  label: 'Facebook',  sub: 'Follow on Facebook',      url: 'https://www.facebook.com/100087507815896/posts/1076516918608559/' },
+  { id: 'threads',   label: 'Threads',   sub: 'Follow on Threads',  url: 'https://www.threads.com/@carter_the_town_wear_' },
 ];
+
+// Public contact address, shown as plain text (not a link) on the home page and in the footer.
+export const CONTACT_EMAIL = 'info@carterthetownwear.com';
 
 // Shown near ordering (product popup, cart, home page, footer). No fees or areas are promised here.
 export const DELIVERY = {

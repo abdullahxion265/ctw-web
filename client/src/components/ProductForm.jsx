@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { CATEGORIES, DEFAULT_BRAND } from '../config';
 import { formatMoney } from '../utils/currency';
-import { prepareImage, formatBytes } from '../utils/image';
+import { prepareImage, formatBytes, DEFAULT_TARGET_BYTES } from '../utils/image';
+import { fitPhotos, getUploadBudget, saveUploadBudget, targetPerPhoto, MIN_TOTAL_BYTES } from '../utils/uploadBudget';
 import { uploadProduct } from '../utils/upload';
 import { photosOf, MAX_PHOTOS } from '../utils/photos';
 
@@ -57,6 +58,9 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
   const [dragOver, setDragOver] = useState(false);
   const [phase, setPhase] = useState('editing');        // editing | uploading | done
   const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState('uploading');     // optimizing | uploading
+  const [optimizing, setOptimizing] = useState({ done: 0, total: 0 });
+  const [uploadNote, setUploadNote] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [askNoPhoto, setAskNoPhoto] = useState(false);
   const [created, setCreated] = useState(null);         // { product, photoUrl, urls }
@@ -93,13 +97,13 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
     setBusy((n) => n + take.length);
     for (const file of take) {
       try {
-        const r = await prepareImage(file);
+        const r = await prepareImage(file, { targetBytes: Math.min(DEFAULT_TARGET_BYTES, targetPerPhoto(1, getUploadBudget())) });
         const url = URL.createObjectURL(r.file);
         urlsRef.current.add(url);
         setPhotos((prev) => {
           if (prev.length >= MAX_PHOTOS) { URL.revokeObjectURL(url); urlsRef.current.delete(url); return prev; }
           uid += 1;
-          return [...prev, { key: `n${uid}`, kind: 'new', url, file: r.file, name: file.name, size: r.size, originalSize: r.originalSize, resized: r.resized, width: r.width, height: r.height }];
+          return [...prev, { key: `n${uid}`, kind: 'new', url, file: r.file, source: r.source, name: file.name, size: r.size, originalSize: r.originalSize, resized: r.resized, width: r.width, height: r.height }];
         });
       } catch (err) {
         problems.push(`${file.name}: ${err.message}`);
@@ -165,27 +169,53 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
     setAskNoPhoto(false);
     setPhase('uploading');
     setProgress(0);
+    setStage('optimizing');
+    setOptimizing({ done: 0, total: 0 });
+    setUploadNote('');
     const controller = new AbortController();
     abortRef.current = controller;
     let newIndex = 0;
     const imageOrder = isEdit ? photos.map((p) => (p.kind === 'existing' ? p.path : `new:${newIndex++}`)) : undefined;
     try {
-      const saved = await uploadProduct({
-        token,
-        id: product?.id,
-        fields: {
-          name: fields.name.trim(), brand: fields.brand.trim(), category: fields.category,
-          price_zar: fields.price_zar, price_mwk: fields.price_mwk, description: fields.description.trim(),
-        },
-        images: photos.filter((p) => p.kind === 'new').map((p) => p.file),
-        imageOrder,
-        onProgress: setProgress,
-        signal: controller.signal,
-      });
+      const payload = {
+        name: fields.name.trim(), brand: fields.brand.trim(), category: fields.category,
+        price_zar: fields.price_zar, price_mwk: fields.price_mwk, description: fields.description.trim(),
+      };
+      let working = photos.filter((p) => p.kind === 'new');
+      let budget = getUploadBudget();
+      let saved;
+      // Fit the new photos to the upload budget, send, and if the server answers 413 (request too large)
+      // halve the budget and try again. The lower budget is remembered, see utils/uploadBudget.js.
+      for (;;) {
+        setStage('optimizing');
+        working = await fitPhotos(working, budget, { signal: controller.signal, onStep: (done, total) => setOptimizing({ done, total }) });
+        setPhotos((prev) => prev.map((p) => working.find((w) => w.key === p.key) || p));
+        setStage('uploading');
+        setProgress(0);
+        try {
+          saved = await uploadProduct({
+            token, id: product?.id, fields: payload, images: working.map((w) => w.file), imageOrder,
+            onProgress: setProgress, signal: controller.signal,
+          });
+          break;
+        } catch (err) {
+          if (err.status === 413 && budget > MIN_TOTAL_BYTES) {
+            budget = Math.max(MIN_TOTAL_BYTES, Math.floor(budget / 2));
+            saveUploadBudget(budget);
+            setUploadNote('The server limits upload size, so the photos are being shrunk further. Trying again...');
+            continue;
+          }
+          if (err.status === 413) {
+            err.message = 'The server rejected the upload even with the smallest photos. Ask your host to raise the upload size limit.';
+          }
+          throw err;
+        }
+      }
       if (isEdit) {
         onSaved?.(saved);              // the parent closes the form
         return;
       }
+      setUploadNote('');
       setCreated({ product: saved, photoUrl: photos[0]?.url || null, urls: photos.map((p) => p.url) });
       setPhotos([]);                   // the done card keeps its own copy of the preview URL
       setPhase('done');
@@ -252,6 +282,7 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
   }
 
   const uploading = phase === 'uploading';
+  const pct = stage === 'optimizing' ? Math.round((optimizing.done / Math.max(1, optimizing.total)) * 100) : progress;
   const retired = isEdit && !CATEGORY_OPTIONS.some((c) => c.id === product.category)
     ? [{ id: product.category, label: `${product.category.charAt(0).toUpperCase()}${product.category.slice(1)} (retired)` }]
     : [];
@@ -531,12 +562,13 @@ export default function ProductForm({ token, brands = [], onCreated, onViewInven
             <div key="uploading" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--color-neutral-light)', marginBottom: '0.4rem' }}>
-                  <span>{progress >= 100 ? 'Saving...' : 'Uploading...'}</span>
-                  <span className="font-mono">{progress}%</span>
+                  <span>{stage === 'optimizing' ? 'Optimizing photos...' : progress >= 100 ? 'Saving...' : 'Uploading...'}</span>
+                  <span className="font-mono">{pct}%</span>
                 </div>
-                <div style={{ height: '6px', borderRadius: '999px', background: 'rgba(142,142,147,0.2)', overflow: 'hidden' }} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-                  <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg, #D4AF37, #AA7C11)', transition: 'width 0.2s ease' }} />
+                <div style={{ height: '6px', borderRadius: '999px', background: 'rgba(142,142,147,0.2)', overflow: 'hidden' }} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #D4AF37, #AA7C11)', transition: 'width 0.2s ease' }} />
                 </div>
+                {uploadNote && <p style={{ marginTop: '0.45rem', fontSize: '0.72rem', color: 'var(--color-muted-gray)', lineHeight: 1.4 }}>{uploadNote}</p>}
               </div>
               <button key="cancel-upload" type="button" onClick={cancelUpload} className="btn-outline-gold" style={{ padding: '0.6rem 1rem', fontSize: '0.78rem' }}>Cancel</button>
             </div>

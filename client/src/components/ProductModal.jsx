@@ -247,7 +247,7 @@ export default function ProductModal({ product, onClose }) {
               letterSpacing: '0.06em',
             }}
           >
-            Tap to chat directly with our team
+            Tap to chat directly with us
           </p>
         </div>
       </div>

@@ -577,3 +577,4 @@ h1, h2, h3 {
 .footer-social:hover, .footer-social:focus-visible { color: var(--color-accent-gold); border-color: var(--color-accent-gold); background: rgba(212, 175, 55, 0.08); outline: none; }
 
 @media (hover: none) { .quick-view-overlay { display: none !important; } }
+

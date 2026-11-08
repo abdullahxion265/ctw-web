@@ -24,7 +24,11 @@ export function uploadProduct({ token, id, fields, images = [], imageOrder, onPr
       let data = null;
       try { data = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
       if (xhr.status >= 200 && xhr.status < 300 && data) resolve(data);
-      else reject(new Error((data && typeof data.error === 'string' && data.error) || messageForStatus(xhr.status)));
+      else {
+        const err = new Error((data && typeof data.error === 'string' && data.error) || messageForStatus(xhr.status));
+        err.status = xhr.status;     // lets the caller react to 413 (request too large)
+        reject(err);
+      }
     };
     xhr.onerror = () => reject(new Error('Could not reach the server. Check your internet connection and try again.'));
     xhr.ontimeout = () => reject(new Error('The upload took too long. Check your connection and try again.'));
