@@ -32,6 +32,21 @@ CREATE TABLE IF NOT EXISTS product_images (
   CONSTRAINT fk_product_images_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- Android app releases (APK uploads). Files live in server/apk, only the details are stored here.
+CREATE TABLE IF NOT EXISTS app_releases (
+  id            INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
+  version_name  VARCHAR(40)   NOT NULL,
+  notes         VARCHAR(1000) NULL,
+  file_name     VARCHAR(255)  NOT NULL,
+  original_name VARCHAR(255)  NOT NULL,
+  size_bytes    BIGINT UNSIGNED NOT NULL,
+  sha256        CHAR(64)      NOT NULL,
+  is_current    TINYINT(1)    NOT NULL DEFAULT 0,
+  downloads     INT UNSIGNED  NOT NULL DEFAULT 0,
+  created_at    TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_app_release_sha (sha256)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS users (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(255)                       NOT NULL,

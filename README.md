@@ -122,6 +122,20 @@ The host's front server may reject large requests (HTTP 413), and one product ca
 - Dropped connections are not treated as size problems (no shrinking, the admin just sees "Could not reach the server" and Try again).
 - If the host raises its limit, raise `DEFAULT_TOTAL_BYTES` in `uploadBudget.js` for sharper photos. Editing a product only counts the NEW photos, existing ones are never re-sent.
 
+## Android app (APK) downloads
+
+Admins publish the Android app from **Admin > App (APK)**; customers download it from the website and install it directly (sideloading).
+
+- **Upload:** choose the .apk, enter a version name (for example 1.2.0) and optional notes. The file is sent in small pieces (700 KB each, one request per piece), so the host's request-size limit never matters. The browser retries a failed piece, resumes from the server's position, and halves the piece size automatically if the server answers 413 (remembered for a week). Code: `client/src/utils/apkUpload.js`.
+- **Checks on the server:** the file must be a zip that contains `AndroidManifest.xml`, at most `APK_MAX_MB` (default 200). The SHA-256 is computed and shown. The exact same APK cannot be uploaded twice. Uploads left unfinished are deleted after 24 hours.
+- **Releases:** the newest upload becomes the current download. Older releases stay listed (you can make one current again or delete it). The 5 newest are kept (`APK_KEEP_RELEASES`), older files are deleted automatically.
+- **Where files live:** `server/apk/` on the server. It is not in the zip and is never served as a static folder: the only way to get the file is `/api/app/download`. Back this folder up if you want to keep old releases.
+- **Public pages:** a "Get the App" card on the home page, an `/app` page with install steps and the checksum, and an "Android app" footer link. All of it stays hidden until the first APK is uploaded.
+- **Download limits** (`server/middleware/apkLimiter.js`, per visitor IP): 5 downloads per hour and 20 per day, at most 2 at the same time, 25 at once for the whole server. Resuming an interrupted download and HEAD checks are not counted. Over the limit, browsers see a "Download limit reached" page and apps get JSON with `Retry-After`. Change the numbers with `APK_DOWNLOADS_PER_HOUR`, `APK_DOWNLOADS_PER_DAY`, `APK_CONCURRENT_PER_IP`, `APK_MAX_CONCURRENT` in `ecosystem.config.js`.
+- **Client IP:** the limits use the IP Express sees. See `TRUST_PROXY_HOPS` above: if a provider proxy sits in front of Apache and every visitor shows the same IP in `pm2 logs` (`[apk] download ... from <ip>`), set `TRUST_PROXY_HOPS=2`, otherwise all visitors would share one limit.
+- **API:** `GET /api/app/latest` (public: `available`, `version`, `notes`, `size`, `sha256`, `downloadUrl`), `GET /api/app/download` (public, limited), admin: `POST /api/app/uploads`, `PUT /api/app/uploads/:id?offset=N`, `POST /api/app/uploads/:id/complete`, `DELETE /api/app/uploads/:id`, `GET /api/app/releases`, `PUT /api/app/releases/:id/current`, `DELETE /api/app/releases/:id`.
+- **Database:** migration `004_app_releases.sql` (and `setup.sql` for new installs). If the table is missing the shop keeps working and the download section just stays hidden.
+
 ## Contact email
 
 The shop's public address is `CONTACT_EMAIL` in `client/src/config.js` (`info@carterthetownwear.com`). It is shown as plain text, deliberately not a link, in the home page strip ("Questions? Email us") and in the footer. `client/index.html` also tells phones not to turn it into a link. Change it in `config.js` and rebuild.
@@ -146,8 +160,9 @@ Each product has a brand. In the admin form the Brand box suggests **CTW** (the 
 
 ## Upgrading an existing database
 
-Run each migration once, in order, as DB root, before deploying the release that needs it (001 and 002 may already be applied; 003 adds multiple photos):
+Run each migration once, in order, as DB root, before deploying the release that needs it (001 and 002 may already be applied; 003 adds multiple photos, 004 adds the APK releases table):
 `sudo mysql < server/migrations/003_product_images.sql`
+`sudo mysql < server/migrations/004_app_releases.sql`
 
 Earlier note: run each migration once, in order, as DB root: `sudo mysql < server/migrations/002_categories_hoodies_caps_shoes.sql` (001 is already applied on the live server).
 

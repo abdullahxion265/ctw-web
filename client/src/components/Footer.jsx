@@ -1,12 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Truck, Mail } from 'lucide-react';
 import { LogoFull } from './Logo';
+import { useLatestRelease } from '../utils/apk';
 import SocialIcon from './SocialIcon';
 import { SOCIAL_LINKS, DELIVERY, CONTACT_EMAIL, APP_NAME } from '../config';
 
 // Site-wide footer. Hidden on the admin pages.
 export default function Footer() {
   const { pathname } = useLocation();
+  const app = useLatestRelease();
   if (pathname.startsWith('/admin')) return null;
 
   return (
@@ -17,6 +19,7 @@ export default function Footer() {
         <nav aria-label="Footer" style={{ display: 'flex', gap: '1.5rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
           <Link to="/" className="footer-link">Home</Link>
           <Link to="/browse" className="footer-link">Browse</Link>
+          {app?.available && <Link to="/app" className="footer-link">Android app</Link>}
         </nav>
 
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginBottom: '1.5rem' }}>

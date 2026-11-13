@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, PlusCircle, Package, Trash2,
-  Shirt, LogOut, ChevronRight, Pencil,
+  Shirt, LogOut, ChevronRight, Pencil, Smartphone,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Toast from '../components/Toast';
 import ProductForm from '../components/ProductForm';
 import { photosOf } from '../utils/photos';
+import ApkManager from '../components/ApkManager';
 import { API_BASE, CATEGORIES } from '../config';
 import { formatMoney, getPrice } from '../utils/currency';
 
@@ -104,17 +105,18 @@ export default function Admin() {
           </h1>
 
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 0 }}>
+          <div style={{ display: 'flex', gap: 0, overflowX: 'auto', whiteSpace: 'nowrap', scrollbarWidth: 'none' }}>
             {[
               { id: 'add', label: 'Add Product', icon: PlusCircle },
               { id: 'inventory', label: `Inventory (${products.length})`, icon: Package },
+              { id: 'apk', label: 'App (APK)', icon: Smartphone },
             ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => { setEditing(null); setActiveTab(id); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  padding: '0.7rem 1.4rem',
+                  padding: '0.7rem 1.1rem', flexShrink: 0,
                   fontSize: '0.875rem', fontWeight: 500, fontFamily: 'var(--font-body)',
                   background: 'none', border: 'none', cursor: 'pointer',
                   borderBottom: activeTab === id ? '2px solid var(--color-accent-gold)' : '2px solid transparent',
@@ -165,6 +167,9 @@ export default function Admin() {
               onViewInventory={() => setActiveTab('inventory')}
             />
           )}
+
+          {/* ── ANDROID APP ─────────────────────────────────── */}
+          {!editing && activeTab === 'apk' && <ApkManager token={token} showToast={showToast} />}
 
           {/* ── INVENTORY ────────────────────────────────────── */}
           {!editing && activeTab === 'inventory' && (

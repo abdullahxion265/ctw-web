@@ -4,6 +4,7 @@ const path = require('path');
 
 const productRoutes = require('./routes/products');
 const authRoutes = require('./routes/auth');
+const appRoutes = require('./routes/app');
 const { apiNotFound, errorHandler } = require('./middleware/errors');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -29,6 +30,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/app', appRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api', apiNotFound);

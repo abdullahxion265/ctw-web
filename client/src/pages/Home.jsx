@@ -7,6 +7,7 @@ import { API_BASE, APP_TAGLINE } from '../config';
 import { LogoFull } from '../components/Logo';
 import ServiceStrip from '../components/ServiceStrip';
 import FollowUs from '../components/FollowUs';
+import GetTheApp from '../components/GetTheApp';
 
 export default function Home() {
   const [picks, setPicks] = useState([]);
@@ -125,6 +126,9 @@ export default function Home() {
 
       {/* ── ORDERING FACTS (delivery) ────────────────────────── */}
       <ServiceStrip />
+
+      {/* ── GET THE APP (hidden until an APK is uploaded) ──── */}
+      <GetTheApp />
 
       {/* ── FOLLOW US ────────────────────────────────────────── */}
       <FollowUs />

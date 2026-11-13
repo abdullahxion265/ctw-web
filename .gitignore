@@ -16,3 +16,7 @@ server/uploads/*
 
 server/ecosystem.config.js
 client/.env.production
+
+# APK releases and unfinished uploads (never commit)
+server/apk/*
+!server/apk/.gitkeep
