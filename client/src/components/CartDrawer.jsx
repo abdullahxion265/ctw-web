@@ -106,11 +106,11 @@ export default function CartDrawer() {
             <footer style={{ padding: '1rem 1.25rem 1.25rem', borderTop: '1px solid rgba(142,142,147,0.15)', background: 'var(--color-secondary-dark)' }}>
               <DeliveryNote style={{ marginBottom: '0.9rem' }} />
               <label htmlFor="cart-note" style={{ display: 'block', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-muted-gold)', marginBottom: '0.35rem' }}>
-                Sizes, colours, delivery area or notes
+                Sizes, colours, delivery location or notes
               </label>
               <textarea
                 id="cart-note" className="input-dark" rows={2} maxLength={MAX_NOTE} value={note}
-                onChange={(e) => setNote(e.target.value)} placeholder="e.g. Hoodie: L, black. Deliver to: your area"
+                onChange={(e) => setNote(e.target.value)} placeholder="e.g. Hoodie: L, black. Deliver to: your location"
                 style={{ resize: 'none', fontSize: '0.85rem', marginBottom: '0.9rem' }}
               />
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '0.25rem' }}>

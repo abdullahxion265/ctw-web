@@ -18,10 +18,10 @@ export const SOCIAL_LINKS = [
 // Public contact address, shown as plain text (not a link) on the home page and in the footer.
 export const CONTACT_EMAIL = 'info@carterthetownwear.com';
 
-// Shown near ordering (product popup, cart, home page, footer). No fees or areas are promised here.
+// Shown near ordering (product popup, cart, home page, footer). No fees or locations are promised here.
 export const DELIVERY = {
   title: 'Delivery available',
-  note: 'Tell us your area when you order and we will arrange delivery.',
+  note: 'Tell us your location when you order and we will arrange delivery.',
 };
 
 export const APP_NAME = 'CarterTheTownWear';

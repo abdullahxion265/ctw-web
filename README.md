@@ -143,7 +143,7 @@ The shop's public address is `CONTACT_EMAIL` in `client/src/config.js` (`info@ca
 ## Follow Us, delivery and footer
 
 - **Follow Us:** a section on the home page (heading and four cards reading "Follow on <platform>", no handles) plus icons in the site footer (Instagram, TikTok, Facebook, Threads). Edit the links in `SOCIAL_LINKS` in `client/src/config.js` and rebuild. The Facebook link is a post link; replace it with the page link when available.
-- **Delivery:** "Delivery available" is shown on the home page, in the product popup, in the cart (with a prompt to put the delivery area in the notes) and in the footer. The wording is `DELIVERY` in `client/src/config.js`. No fees, areas or timings are promised on the site.
+- **Delivery:** "Delivery available" is shown on the home page, in the product popup, in the cart (with a prompt to put the delivery location in the notes) and in the footer. The wording is `DELIVERY` in `client/src/config.js`. No fees, locations or timings are promised on the site.
 - **Footer:** one footer for the whole site (`client/src/components/Footer.jsx`), hidden on admin pages.
 
 ## Brands
